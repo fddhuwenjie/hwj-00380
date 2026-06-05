@@ -31,6 +31,20 @@
             {{ cat.label }}
           </el-radio-button>
         </el-radio-group>
+
+        <el-select
+          v-model="currentSort"
+          placeholder="排序方式"
+          style="width: 160px; margin-left: auto;"
+          @change="handleSortChange"
+        >
+          <el-option
+            v-for="opt in sortOptions"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
       </div>
 
       <div v-loading="recipes.loading" class="recipes-grid">
@@ -41,10 +55,34 @@
           class="recipe-card"
         >
           <div class="recipe-header">
-            <h3 class="recipe-name">{{ recipe.name }}</h3>
-            <el-tag :type="getCategoryTagType(recipe.category)" size="small">
-              {{ recipe.category }}
-            </el-tag>
+            <div class="recipe-title-row">
+              <h3 class="recipe-name">{{ recipe.name }}</h3>
+              <el-button
+                :type="recipe.is_favorite ? 'warning' : 'default'"
+                link
+                size="small"
+                @click="(e) => toggleFavorite(recipe, e)"
+                class="favorite-btn"
+              >
+                <el-icon><Star :fill="recipe.is_favorite ? '#E6A23C' : 'none'" :color="recipe.is_favorite ? '#E6A23C' : '#909399'" /></el-icon>
+              </el-button>
+            </div>
+            <div class="recipe-tags">
+              <el-tag :type="getCategoryTagType(recipe.category)" size="small">
+                {{ recipe.category }}
+              </el-tag>
+              <el-tag
+                v-if="recipe.avg_rating > 0"
+                type="warning"
+                size="small"
+                effect="light"
+                class="rating-tag"
+              >
+                <el-icon><Star fill="#E6A23C" /></el-icon>
+                {{ recipe.avg_rating.toFixed(1) }}
+                <span v-if="recipe.rating_count">({{ recipe.rating_count }})</span>
+              </el-tag>
+            </div>
           </div>
 
           <div class="recipe-meta">
@@ -116,13 +154,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus, Search, User, View, Edit, Delete, Document } from '@element-plus/icons-vue'
-import { useRecipesStore } from '@/store'
+import { Plus, Search, User, View, Edit, Delete, Document, Star } from '@element-plus/icons-vue'
+import { useRecipesStore, useFavoritesStore } from '@/store'
 import { getRecipeNutrition } from '@/api/recipes'
 import { checkNutritionWarnings } from '@/utils/nutrition'
 
 const router = useRouter()
 const recipes = useRecipesStore()
+const favoritesStore = useFavoritesStore()
 
 const categories = [
   { label: '全部', value: '' },
@@ -132,8 +171,16 @@ const categories = [
   { label: '小食', value: '小食' }
 ]
 
+const sortOptions = [
+  { label: '默认排序', value: '' },
+  { label: '评分最高', value: 'rating' },
+  { label: '名称排序', value: 'name' },
+  { label: '最新更新', value: 'updated' }
+]
+
 const searchKeyword = ref('')
 const currentCategory = ref('')
+const currentSort = ref('')
 const deleteDialogVisible = ref(false)
 const deletingRecipe = ref(null)
 const nutritionCache = ref({})
@@ -150,6 +197,14 @@ const filteredRecipes = computed(() => {
     result = result.filter(item =>
       item.name.toLowerCase().includes(keyword)
     )
+  }
+
+  if (currentSort.value === 'rating') {
+    result.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
+  } else if (currentSort.value === 'name') {
+    result.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  } else if (currentSort.value === 'updated') {
+    result.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
   }
 
   return result
@@ -204,16 +259,35 @@ const getWarningClass = (type) => {
 }
 
 const loadData = async () => {
-  await recipes.fetchList()
+  const params = {}
+  if (currentSort.value) {
+    params.sort_by = currentSort.value
+  }
+  await recipes.fetchList(params)
   nutritionCache.value = {}
   for (const recipe of recipes.list) {
     await loadNutrition(recipe.id)
   }
 }
 
+const toggleFavorite = async (recipe, e) => {
+  e.stopPropagation()
+  try {
+    await favoritesStore.toggle(recipe.id)
+    recipe.is_favorite = !recipe.is_favorite
+    ElMessage.success(recipe.is_favorite ? '已收藏' : '已取消收藏')
+  } catch (err) {
+    ElMessage.error(err.message || '操作失败')
+  }
+}
+
 const handleSearch = () => {}
 
 const handleCategoryChange = () => {}
+
+const handleSortChange = () => {
+  loadData()
+}
 
 const handleCreate = () => {
   router.push('/recipes/create')
@@ -276,9 +350,15 @@ onMounted(() => {
 
 .recipe-header {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.recipe-title-row {
+  display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
 }
 
 .recipe-name {
@@ -288,6 +368,28 @@ onMounted(() => {
   margin: 0;
   flex: 1;
   margin-right: 12px;
+}
+
+.recipe-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rating-tag :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.favorite-btn {
+  padding: 4px 8px;
+  font-size: 18px;
+}
+
+.favorite-btn:hover {
+  transform: scale(1.1);
 }
 
 .recipe-meta {

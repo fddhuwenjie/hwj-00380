@@ -4,6 +4,11 @@ import { getRecipes, getRecipeById, createRecipe, updateRecipe, deleteRecipe } f
 import { getMealPlans, createMealPlan, updateMealPlan, deleteMealPlan } from '@/api/mealPlans'
 import { getShoppingList, addShoppingItem, updateShoppingItem, deleteShoppingItem, toggleShoppingItem, clearShoppingList } from '@/api/shoppingList'
 import { getGoals, updateGoals, getGoalProgress } from '@/api/goals'
+import { getCurrentUser, updateUserProfile, calculateBMR, getActivityLevels, getUserTargets } from '@/api/users'
+import { getFavorites, toggleFavorite } from '@/api/favorites'
+import { getRecipeRatings, rateRecipe } from '@/api/ratings'
+import { getDiary, getDiaryHistory, addDiaryItem, deleteDiaryItem } from '@/api/diary'
+import { getNutritionTrend, getMacroRatio, getStatisticsSummary } from '@/api/statistics'
 
 export const useIngredientsStore = defineStore('ingredients', {
   state: () => ({
@@ -172,6 +177,171 @@ export const useGoalsStore = defineStore('goals', {
       try {
         const res = await getGoalProgress()
         this.progress = res.data || res
+      } finally {
+        this.loading = false
+      }
+    }
+  }
+})
+
+export const useUserStore = defineStore('user', {
+  state: () => ({
+    profile: null,
+    targets: null,
+    activityLevels: [],
+    loading: false
+  }),
+  actions: {
+    async fetchProfile() {
+      this.loading = true
+      try {
+        const res = await getCurrentUser()
+        this.profile = res.data || res
+        return this.profile
+      } finally {
+        this.loading = false
+      }
+    },
+    async updateProfile(data) {
+      const res = await updateUserProfile(data)
+      this.profile = res.data || res
+      return res
+    },
+    async calculate(data) {
+      const res = await calculateBMR(data)
+      return res
+    },
+    async fetchActivityLevels() {
+      const res = await getActivityLevels()
+      this.activityLevels = res.data || res
+      return this.activityLevels
+    },
+    async fetchTargets() {
+      const res = await getUserTargets()
+      this.targets = res.data || res
+      return this.targets
+    }
+  }
+})
+
+export const useFavoritesStore = defineStore('favorites', {
+  state: () => ({
+    list: [],
+    loading: false
+  }),
+  actions: {
+    async fetchList() {
+      this.loading = true
+      try {
+        const res = await getFavorites()
+        this.list = res.data || res
+        return this.list
+      } finally {
+        this.loading = false
+      }
+    },
+    async toggle(recipeId) {
+      const res = await toggleFavorite(recipeId)
+      return res
+    }
+  }
+})
+
+export const useRatingsStore = defineStore('ratings', {
+  state: () => ({
+    current: null,
+    loading: false
+  }),
+  actions: {
+    async fetchRecipeRatings(recipeId) {
+      this.loading = true
+      try {
+        const res = await getRecipeRatings(recipeId)
+        this.current = res.data || res
+        return this.current
+      } finally {
+        this.loading = false
+      }
+    },
+    async rateRecipe(recipeId, data) {
+      const res = await rateRecipe(recipeId, data)
+      return res
+    }
+  }
+})
+
+export const useDiaryStore = defineStore('diary', {
+  state: () => ({
+    current: null,
+    history: [],
+    loading: false
+  }),
+  actions: {
+    async fetch(date) {
+      this.loading = true
+      try {
+        const res = await getDiary(date)
+        this.current = res.data || res
+        return this.current
+      } finally {
+        this.loading = false
+      }
+    },
+    async fetchHistory(params) {
+      this.loading = true
+      try {
+        const res = await getDiaryHistory(params)
+        this.history = res.data || res
+        return this.history
+      } finally {
+        this.loading = false
+      }
+    },
+    async addItem(data) {
+      const res = await addDiaryItem(data)
+      return res
+    },
+    async deleteItem(itemId) {
+      const res = await deleteDiaryItem(itemId)
+      return res
+    }
+  }
+})
+
+export const useStatisticsStore = defineStore('statistics', {
+  state: () => ({
+    trend: null,
+    macroRatio: null,
+    summary: null,
+    loading: false
+  }),
+  actions: {
+    async fetchTrend(days) {
+      this.loading = true
+      try {
+        const res = await getNutritionTrend(days)
+        this.trend = res.data || res
+        return this.trend
+      } finally {
+        this.loading = false
+      }
+    },
+    async fetchMacroRatio(period) {
+      this.loading = true
+      try {
+        const res = await getMacroRatio(period)
+        this.macroRatio = res.data || res
+        return this.macroRatio
+      } finally {
+        this.loading = false
+      }
+    },
+    async fetchSummary(period) {
+      this.loading = true
+      try {
+        const res = await getStatisticsSummary(period)
+        this.summary = res.data || res
+        return this.summary
       } finally {
         this.loading = false
       }

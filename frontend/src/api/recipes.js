@@ -4,6 +4,10 @@ export const getRecipes = (params) => {
   return api.get('/recipes', { params })
 }
 
+export const getRecipesSorted = (params) => {
+  return api.get('/recipes', { params })
+}
+
 export const getRecipeById = (id) => {
   return api.get(`/recipes/${id}`)
 }

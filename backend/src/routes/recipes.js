@@ -43,7 +43,7 @@ function calculateNutrition(recipeId, servings) {
   return { total, perServing };
 }
 
-function getRecipeWithDetails(recipeId) {
+function getRecipeWithDetails(recipeId, userId = 1) {
   const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(recipeId);
   if (!recipe) return null;
 
@@ -65,34 +65,75 @@ function getRecipeWithDetails(recipeId) {
 
   const nutrition = calculateNutrition(recipeId, recipe.servings);
 
+  const ratingStats = db.prepare(`
+    SELECT AVG(rating) as avg_rating, COUNT(*) as total_ratings
+    FROM recipe_ratings WHERE recipe_id = ?
+  `).get(recipeId);
+
+  const userRating = db.prepare(`
+    SELECT * FROM recipe_ratings WHERE recipe_id = ? AND user_id = ?
+  `).get(recipeId, userId);
+
+  const isFavorite = db.prepare(`
+    SELECT id FROM recipe_favorites WHERE recipe_id = ? AND user_id = ?
+  `).get(recipeId, userId);
+
   return {
     ...recipe,
     steps: stepsWithIngredients,
     totalNutrition: nutrition.total,
-    perServingNutrition: nutrition.perServing
+    perServingNutrition: nutrition.perServing,
+    avg_rating: ratingStats.avg_rating ? Math.round(ratingStats.avg_rating * 10) / 10 : 0,
+    total_ratings: ratingStats.total_ratings || 0,
+    user_rating: userRating || null,
+    is_favorite: !!isFavorite
   };
 }
 
 router.get('/', (req, res) => {
   try {
-    const { category, search } = req.query;
-    let sql = 'SELECT * FROM recipes WHERE 1=1';
-    const params = [];
+    const { category, search, sort_by, user_id = 1 } = req.query;
+    let sql = `
+      SELECT r.*, 
+             COALESCE(AVG(rr.rating), 0) as avg_rating,
+             COUNT(DISTINCT rr.id) as rating_count,
+             CASE WHEN rf.id IS NOT NULL THEN 1 ELSE 0 END as is_favorite
+      FROM recipes r
+      LEFT JOIN recipe_ratings rr ON r.id = rr.recipe_id
+      LEFT JOIN recipe_favorites rf ON r.id = rf.recipe_id AND rf.user_id = ?
+      WHERE 1=1
+    `;
+    const params = [user_id];
 
     if (category) {
-      sql += ' AND category = ?';
+      sql += ' AND r.category = ?';
       params.push(category);
     }
 
     if (search) {
-      sql += ' AND name LIKE ?';
+      sql += ' AND r.name LIKE ?';
       params.push(`%${search}%`);
     }
 
-    sql += ' ORDER BY updated_at DESC';
+    sql += ' GROUP BY r.id';
+
+    if (sort_by === 'rating') {
+      sql += ' ORDER BY avg_rating DESC, rating_count DESC';
+    } else if (sort_by === 'name') {
+      sql += ' ORDER BY r.name ASC';
+    } else {
+      sql += ' ORDER BY r.updated_at DESC';
+    }
 
     const recipes = db.prepare(sql).all(...params);
-    res.json({ success: true, data: recipes });
+    
+    const result = recipes.map(r => ({
+      ...r,
+      avg_rating: r.avg_rating ? Math.round(r.avg_rating * 10) / 10 : 0,
+      is_favorite: r.is_favorite === 1
+    }));
+
+    res.json({ success: true, data: result });
   } catch (error) {
     res.json({ success: false, error: error.message });
   }

@@ -18,7 +18,23 @@
       <template v-if="recipe">
         <div class="card recipe-header-card">
           <div class="recipe-title-section">
-            <h1 class="recipe-name">{{ recipe.name }}</h1>
+            <div class="title-row">
+              <h1 class="recipe-name">{{ recipe.name }}</h1>
+              <div class="title-actions">
+                <el-button
+                  :type="isFavorite ? 'warning' : 'default'"
+                  size="large"
+                  @click="toggleFavorite"
+                >
+                  <el-icon><Star :fill="isFavorite ? '#E6A23C' : 'none'" /></el-icon>
+                  {{ isFavorite ? '已收藏' : '收藏' }}
+                </el-button>
+                <el-button type="primary" size="large" @click="openRatingDialog">
+                  <el-icon><Star /></el-icon>
+                  {{ userRating.rating > 0 ? '修改评分' : '去评分' }}
+                </el-button>
+              </div>
+            </div>
             <div class="recipe-tags">
               <el-tag :type="getCategoryTagType(recipe.category)" size="large">
                 {{ recipe.category }}
@@ -26,6 +42,13 @@
               <el-tag type="info" size="large">
                 <el-icon><User /></el-icon>
                 {{ baseServings }} 人份
+              </el-tag>
+              <el-tag type="warning" size="large" v-if="avgRating > 0">
+                <el-icon><Star fill="#E6A23C" /></el-icon>
+                {{ avgRating.toFixed(1) }} 分 ({{ ratingCount }}条评价)
+              </el-tag>
+              <el-tag type="warning" size="large" v-if="userRating.rating > 0">
+                我的评分: {{ userRating.rating }} 星
               </el-tag>
             </div>
           </div>
@@ -42,6 +65,15 @@
             <span class="servings-hint">
               （所有食材用量和营养数据将自动按比例缩放）
             </span>
+            <el-button
+              v-if="Object.keys(replacedIngredients).length > 0"
+              type="danger"
+              link
+              @click="resetReplacements"
+            >
+              <el-icon><RefreshRight /></el-icon>
+              重置替换
+            </el-button>
           </div>
 
           <div class="warning-tags" v-if="warnings.length > 0">
@@ -56,6 +88,14 @@
               {{ warning.message }}
             </el-tag>
           </div>
+
+          <el-alert
+            v-if="Object.keys(replacedIngredients).length > 0"
+            :title="'已替换 ' + Object.keys(replacedIngredients).length + ' 种食材，营养数据已重新计算'"
+            type="success"
+            :closable="false"
+            show-icon
+          />
         </div>
 
         <div class="card nutrition-overview-card">
@@ -136,9 +176,28 @@
         </div>
 
         <div class="card ingredients-card">
-          <h3 class="section-title">食材汇总（{{ currentServings }}人份）</h3>
+          <div class="section-header">
+            <h3 class="section-title">食材汇总（{{ currentServings }}人份）</h3>
+            <span class="section-hint">点击「替换」查看相似食材推荐</span>
+          </div>
           <el-table :data="mergedIngredients" stripe>
-            <el-table-column prop="ingredient_name" label="食材名称" min-width="150" />
+            <el-table-column prop="ingredient_name" label="食材名称" min-width="180">
+              <template #default="{ row }">
+                <div class="ingredient-name-cell">
+                  <span :class="{ 'replaced-name': row.is_replaced }">
+                    {{ row.ingredient_name }}
+                  </span>
+                  <el-tag
+                    v-if="row.is_replaced"
+                    type="success"
+                    size="small"
+                    effect="light"
+                  >
+                    已替换
+                  </el-tag>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="总用量" width="120" align="right">
               <template #default="{ row }">
                 <span class="amount-text">{{ row.amount }}g</span>
@@ -149,29 +208,167 @@
                 <span class="per-serving-text">{{ (row.amount / currentServings).toFixed(1) }}g</span>
               </template>
             </el-table-column>
+            <el-table-column label="操作" width="100" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="showReplacements(row)"
+                >
+                  替换
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
+        </div>
+
+        <div class="card ratings-card" v-if="ratingsList.length > 0">
+          <h3 class="section-title">
+            <el-icon><ChatLineRound /></el-icon>
+            用户评价 ({{ ratingsList.length }})
+          </h3>
+          <div class="ratings-list">
+            <div
+              v-for="rating in ratingsList"
+              :key="rating.id"
+              class="rating-item"
+            >
+              <div class="rating-header">
+                <div class="rating-user">
+                  <el-avatar :size="36" class="rating-avatar">
+                    {{ (rating.username || 'U').charAt(0).toUpperCase() }}
+                  </el-avatar>
+                  <div class="rating-info">
+                    <span class="rating-username">{{ rating.username || '匿名用户' }}</span>
+                    <div class="rating-stars">
+                      <el-rate
+                        :model-value="rating.rating"
+                        disabled
+                        size="small"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <span class="rating-date">{{ formatDate(rating.created_at) }}</span>
+              </div>
+              <p v-if="rating.comment" class="rating-comment">{{ rating.comment }}</p>
+            </div>
+          </div>
         </div>
       </template>
 
-      <el-empty v-else-if="!loading" description="未找到食谱信息" />
+      <el-dialog
+        v-model="showRatingDialog"
+        :title="userRating.rating > 0 ? '修改评分' : '给食谱评分'"
+        width="500px"
+      >
+        <el-form label-width="80px" class="rating-form">
+          <el-form-item label="评分">
+            <el-rate
+              v-model="ratingForm.rating"
+              size="large"
+              show-text
+              :texts="['很差', '较差', '还行', '推荐', '超赞']"
+            />
+          </el-form-item>
+          <el-form-item label="评价">
+            <el-input
+              v-model="ratingForm.comment"
+              type="textarea"
+              :rows="4"
+              placeholder="分享您对这个食谱的看法..."
+              maxlength="500"
+              show-word-limit
+            />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="showRatingDialog = false">取消</el-button>
+          <el-button type="primary" @click="submitRating">提交</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="replacements.visible"
+        title="食材替换建议"
+        width="600px"
+        append-to-body
+      >
+        <div v-loading="replacements.loading" class="replacement-content">
+          <div v-if="replacements.ingredient" class="replacement-header">
+            <span>原食材：</span>
+            <el-tag type="info" size="large">
+              {{ replacements.ingredient.ingredient_name }}
+            </el-tag>
+            <span class="replacement-tip">（选择以下任一食材进行替换，营养数据将自动重算）</span>
+          </div>
+
+          <el-radio-group
+            v-model="replacements.selectedIngredient"
+            class="replacement-list"
+          >
+            <el-radio
+              v-for="item in replacements.list"
+              :key="item.id"
+              :value="item"
+              class="replacement-item"
+            >
+              <div class="replacement-item-content">
+                <div class="replacement-item-header">
+                  <span class="replacement-name">{{ item.name }}</span>
+                  <el-tag
+                    v-if="item.calorie_diff_percent"
+                    :type="Math.abs(item.calorie_diff_percent) < 10 ? 'success' : 'warning'"
+                    size="small"
+                  >
+                    热量{{ item.calorie_diff_percent > 0 ? '+' : '' }}{{ item.calorie_diff_percent.toFixed(1) }}%
+                  </el-tag>
+                </div>
+                <div class="replacement-item-nutrition">
+                  <span>热量：{{ item.calories }} kcal/100g</span>
+                  <span>蛋白质：{{ item.protein }}g</span>
+                  <span>脂肪：{{ item.fat }}g</span>
+                  <span>碳水：{{ item.carbs }}g</span>
+                </div>
+              </div>
+            </el-radio>
+          </el-radio-group>
+        </div>
+        <template #footer>
+          <el-button @click="replacements.visible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :disabled="!replacements.selectedIngredient"
+            @click="applyReplacement"
+          >
+            确认替换
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <el-empty v-if="!recipe && !loading" description="未找到食谱信息" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { useRoute, useRouter } from 'vue-router'
-import { useRecipesStore, useGoalsStore } from '@/store'
+import { useRecipesStore, useGoalsStore, useFavoritesStore, useRatingsStore } from '@/store'
 import { checkNutritionWarnings, calculateMacronutrientRatio, roundNutrition } from '@/utils/nutrition'
-import { ArrowLeft, Edit, User } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ArrowLeft, Edit, User, Star, RefreshRight, Delete, ChatLineRound, Plus } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRecipeNutrition } from '@/api/recipes'
+import { getIngredientReplacements, calculateReplacedRecipeNutrition } from '@/api/replacements'
 
 const route = useRoute()
 const router = useRouter()
 const recipesStore = useRecipesStore()
 const goalsStore = useGoalsStore()
+const favoritesStore = useFavoritesStore()
+const ratingsStore = useRatingsStore()
 
 const loading = ref(false)
 const recipe = ref(null)
@@ -180,6 +377,31 @@ const baseServings = ref(1)
 const currentServings = ref(1)
 let pieChart = null
 let barChart = null
+
+const isFavorite = ref(false)
+const avgRating = ref(0)
+const ratingCount = ref(0)
+const userRating = reactive({
+  rating: 0,
+  comment: ''
+})
+const ratingsList = ref([])
+const showRatingDialog = ref(false)
+const ratingForm = reactive({
+  rating: 0,
+  comment: ''
+})
+
+const replacements = reactive({
+  visible: false,
+  ingredient: null,
+  list: [],
+  selectedIngredient: null,
+  loading: false
+})
+
+const replacedIngredients = ref({})
+const adjustedNutrition = ref(null)
 
 const dailyRecommendations = {
   calories: 2000,
@@ -209,14 +431,19 @@ const scaleFactor = computed(() => {
   return currentServings.value / baseServings.value
 })
 
-const scaledNutrition = computed(() => {
-  if (!baseNutrition.value) {
-    return { calories: 0, protein: 0, fat: 0, carbohydrate: 0, fiber: 0, sodium: 0 }
+const effectiveNutrition = computed(() => {
+  if (adjustedNutrition.value) {
+    return adjustedNutrition.value
   }
+  return baseNutrition.value || { calories: 0, protein: 0, fat: 0, carbohydrate: 0, fiber: 0, sodium: 0 }
+})
+
+const scaledNutrition = computed(() => {
+  const base = effectiveNutrition.value
   const scaled = {}
-  for (const key in baseNutrition.value) {
-    if (typeof baseNutrition.value[key] === 'number') {
-      scaled[key] = baseNutrition.value[key] * scaleFactor.value
+  for (const key in base) {
+    if (typeof base[key] === 'number') {
+      scaled[key] = base[key] * scaleFactor.value
     }
   }
   return roundNutrition(scaled, 1)
@@ -247,23 +474,179 @@ const mergedIngredients = computed(() => {
     if (step.ingredients) {
       for (const ing of step.ingredients) {
         const name = ing.ingredient_name || ing.name
+        const ingredientId = ing.ingredient_id || ing.id
         const scaledAmount = Math.round(ing.amount * scaleFactor.value * 10) / 10
         if (ingredientMap.has(name)) {
-          ingredientMap.set(
-            name,
-            ingredientMap.get(name) + scaledAmount
-          )
+          const existing = ingredientMap.get(name)
+          existing.amount += scaledAmount
         } else {
-          ingredientMap.set(name, scaledAmount)
+          ingredientMap.set(name, {
+            ingredient_name: name,
+            ingredient_id: ingredientId,
+            amount: scaledAmount,
+            original_name: name
+          })
         }
       }
     }
   }
-  return Array.from(ingredientMap.entries()).map(([name, amount]) => ({
-    ingredient_name: name,
-    amount: Math.round(amount * 10) / 10
+  return Array.from(ingredientMap.values()).map(item => ({
+    ...item,
+    amount: Math.round(item.amount * 10) / 10,
+    is_replaced: !!replacedIngredients.value[item.ingredient_name],
+    replaced_with: replacedIngredients.value[item.ingredient_name]?.name
   }))
 })
+
+const toggleFavorite = async () => {
+  try {
+    await favoritesStore.toggle(route.params.id)
+    isFavorite.value = !isFavorite.value
+    ElMessage.success(isFavorite.value ? '已收藏' : '已取消收藏')
+  } catch (err) {
+    ElMessage.error(err.message || '操作失败')
+  }
+}
+
+const openRatingDialog = () => {
+  ratingForm.rating = userRating.rating || 0
+  ratingForm.comment = userRating.comment || ''
+  showRatingDialog.value = true
+}
+
+const submitRating = async () => {
+  if (ratingForm.rating === 0) {
+    ElMessage.warning('请选择评分')
+    return
+  }
+  try {
+    await ratingsStore.rate(route.params.id, {
+      rating: ratingForm.rating,
+      comment: ratingForm.comment
+    })
+    ElMessage.success('评分成功')
+    showRatingDialog.value = false
+    await loadRatings()
+  } catch (err) {
+    ElMessage.error(err.message || '评分失败')
+  }
+}
+
+const loadRatings = async () => {
+  try {
+    const res = await ratingsStore.fetchRecipeRatings(route.params.id)
+    const data = res.data || res
+    avgRating.value = data.avg_rating || 0
+    ratingCount.value = data.rating_count || 0
+    ratingsList.value = data.ratings || []
+    const userRate = data.user_rating
+    if (userRate) {
+      userRating.rating = userRate.rating
+      userRating.comment = userRate.comment || ''
+    }
+  } catch (err) {
+    console.error('加载评分失败', err)
+  }
+}
+
+const loadFavoriteStatus = async () => {
+  try {
+    const res = await favoritesStore.checkStatus(route.params.id)
+    const data = res.data || res
+    isFavorite.value = data.is_favorite || false
+  } catch (err) {
+    console.error('加载收藏状态失败', err)
+  }
+}
+
+const showReplacements = async (ingredient) => {
+  if (!ingredient.ingredient_id) {
+    ElMessage.warning('该食材暂不支持替换')
+    return
+  }
+  replacements.ingredient = ingredient
+  replacements.loading = true
+  replacements.visible = true
+  replacements.list = []
+  replacements.selectedIngredient = null
+  try {
+    const res = await getIngredientReplacements(ingredient.ingredient_id)
+    const data = res.data || res
+    replacements.list = data.replacements || []
+    if (replacements.list.length === 0) {
+      ElMessage.info('暂无合适的替换食材')
+      replacements.visible = false
+    }
+  } catch (err) {
+    ElMessage.error(err.message || '加载替换食材失败')
+    replacements.visible = false
+  } finally {
+    replacements.loading = false
+  }
+}
+
+const applyReplacement = async () => {
+  if (!replacements.selectedIngredient) {
+    ElMessage.warning('请选择替换食材')
+    return
+  }
+  try {
+    const originalIngredient = replacements.ingredient
+    const newIngredient = replacements.selectedIngredient
+    
+    const stepsCopy = JSON.parse(JSON.stringify(recipe.value.steps))
+    for (const step of stepsCopy) {
+      if (step.ingredients) {
+        for (const ing of step.ingredients) {
+          const ingName = ing.ingredient_name || ing.name
+          if (ingName === originalIngredient.ingredient_name) {
+            ing.original_ingredient_id = ing.ingredient_id || ing.id
+            ing.ingredient_id = newIngredient.id
+            ing.ingredient_name = newIngredient.name
+            ing.original_name = originalIngredient.ingredient_name
+          }
+        }
+      }
+    }
+    
+    const res = await calculateReplacedRecipeNutrition(route.params.id, {
+      steps: stepsCopy,
+      replacements: {
+        [originalIngredient.ingredient_id]: newIngredient.id
+      }
+    })
+    const data = res.data || res
+    
+    if (data.nutrition) {
+      adjustedNutrition.value = data.nutrition
+    }
+    
+    replacedIngredients.value[originalIngredient.ingredient_name] = {
+      name: newIngredient.name,
+      original_name: originalIngredient.ingredient_name,
+      id: newIngredient.id,
+      original_id: originalIngredient.ingredient_id
+    }
+    
+    recipe.value = {
+      ...recipe.value,
+      steps: stepsCopy
+    }
+    
+    ElMessage.success(`已将「${originalIngredient.ingredient_name}」替换为「${newIngredient.name}」`)
+    replacements.visible = false
+    updateCharts()
+  } catch (err) {
+    ElMessage.error(err.message || '替换失败')
+  }
+}
+
+const resetReplacements = () => {
+  replacedIngredients.value = {}
+  adjustedNutrition.value = null
+  loadData()
+  ElMessage.success('已重置所有食材替换')
+}
 
 const getScaledStepIngredients = (step) => {
   if (!step.ingredients) return []
@@ -469,6 +852,10 @@ const loadData = async () => {
         baseNutrition.value = { calories: 0, protein: 0, fat: 0, carbohydrate: 0, fiber: 0, sodium: 0 }
       }
     }
+    await Promise.all([
+      loadRatings(),
+      loadFavoriteStatus()
+    ])
     await nextTick()
     initPieChart()
     initBarChart()
@@ -485,6 +872,16 @@ const handleBack = () => {
 
 const handleEdit = () => {
   router.push(`/recipes/${recipe.value.id}/edit`)
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
 }
 
 watch(currentServings, () => {
@@ -751,6 +1148,171 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.title-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-hint {
+  font-size: 12px;
+  color: #909399;
+}
+
+.ingredient-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.replaced-name {
+  color: #67C23A;
+  font-weight: 500;
+}
+
+.ratings-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.ratings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rating-item {
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.rating-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.rating-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rating-avatar {
+  background: linear-gradient(135deg, #409EFF, #66b1ff);
+}
+
+.rating-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rating-username {
+  font-weight: 500;
+  color: #303133;
+  font-size: 14px;
+}
+
+.rating-date {
+  font-size: 12px;
+  color: #909399;
+}
+
+.rating-comment {
+  margin: 0;
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.replacement-content {
+  min-height: 200px;
+}
+
+.replacement-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.replacement-tip {
+  font-size: 12px;
+  color: #909399;
+}
+
+.replacement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.replacement-item {
+  margin: 0;
+  width: 100%;
+}
+
+.replacement-item :deep(.el-radio__label) {
+  width: 100%;
+  padding-left: 12px;
+}
+
+.replacement-item-content {
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.replacement-item:hover .replacement-item-content {
+  background: #ecf5ff;
+  border-color: #409EFF;
+}
+
+.replacement-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.replacement-name {
+  font-weight: 500;
+  color: #303133;
+  font-size: 15px;
+}
+
+.replacement-item-nutrition {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #606266;
+}
+
+.rating-form {
+  margin-top: 16px;
+}
+
 @media (max-width: 1200px) {
   .nutrition-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -773,6 +1335,21 @@ onUnmounted(() => {
   .servings-control {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .title-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .title-actions {
+    width: 100%;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 }
 </style>

@@ -35,6 +35,22 @@
           <el-icon><Search /></el-icon>
           <span>搜索推荐</span>
         </el-menu-item>
+        <el-menu-item index="/diary">
+          <el-icon><Document /></el-icon>
+          <span>饮食日记</span>
+        </el-menu-item>
+        <el-menu-item index="/statistics">
+          <el-icon><DataLine /></el-icon>
+          <span>营养统计</span>
+        </el-menu-item>
+        <el-menu-item index="/favorites">
+          <el-icon><Star /></el-icon>
+          <span>我的收藏</span>
+        </el-menu-item>
+        <el-menu-item index="/profile">
+          <el-icon><User /></el-icon>
+          <span>体质档案</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -58,7 +74,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Food, Dish, Notebook, Calendar, ShoppingCart, Search } from '@element-plus/icons-vue'
+import { Food, Dish, Notebook, Calendar, ShoppingCart, Search, Document, DataLine, Star, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -71,7 +87,11 @@ const currentPageTitle = computed(() => {
     '/recipes/create': '创建食谱',
     '/meal-plans': '饮食计划',
     '/shopping-list': '购物清单',
-    '/search': '搜索推荐'
+    '/search': '搜索推荐',
+    '/diary': '饮食日记',
+    '/statistics': '营养统计',
+    '/favorites': '我的收藏',
+    '/profile': '体质档案'
   }
   const path = route.path.startsWith('/recipes/') && route.path !== '/recipes/create'
     ? '/recipes'

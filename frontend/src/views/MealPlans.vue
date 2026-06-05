@@ -64,6 +64,19 @@
           </div>
         </div>
 
+        <el-alert
+          v-if="userTargets.calories"
+          :title="'已根据您的体质档案计算每日营养目标：热量 ' + userTargets.calories + ' kcal，可点击「配置健康目标」手动调整'"
+          type="success"
+          :closable="false"
+          show-icon
+          class="targets-alert"
+        >
+          <template #icon>
+            <el-icon><User /></el-icon>
+          </template>
+        </el-alert>
+
         <div class="weekly-summary-card">
           <h3 class="card-title">每周营养汇总</h3>
           <div class="summary-grid">
@@ -280,8 +293,8 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRecipesStore, useMealPlanStore, useGoalsStore } from '@/store'
-import { Search, Setting, ShoppingCart, Delete } from '@element-plus/icons-vue'
+import { useRecipesStore, useMealPlanStore, useGoalsStore, useUserStore } from '@/store'
+import { Search, Setting, ShoppingCart, Delete, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { roundNutrition } from '@/utils/nutrition'
@@ -290,6 +303,7 @@ const router = useRouter()
 const recipesStore = useRecipesStore()
 const mealPlanStore = useMealPlanStore()
 const goalsStore = useGoalsStore()
+const userStore = useUserStore()
 
 const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const mealTypes = [
@@ -323,7 +337,20 @@ const defaultGoals = {
 
 const goalForm = reactive({ ...defaultGoals })
 
-const goals = computed(() => goalsStore.data || defaultGoals)
+const userTargets = computed(() => userStore.nutrientTargets || {})
+
+const goals = computed(() => {
+  const customGoals = goalsStore.data || {}
+  const targets = userTargets.value
+  return {
+    calories: customGoals.calories || targets.calories || defaultGoals.calories,
+    protein: customGoals.protein || targets.protein || defaultGoals.protein,
+    fat: customGoals.fat || targets.fat || defaultGoals.fat,
+    carbohydrate: customGoals.carbohydrate || targets.carbohydrate || targets.carbs || defaultGoals.carbohydrate,
+    fiber: customGoals.fiber || targets.fiber || defaultGoals.fiber,
+    sodium: customGoals.sodium || targets.sodium || defaultGoals.sodium
+  }
+})
 
 const planItems = reactive({})
 
@@ -535,7 +562,8 @@ const loadData = async () => {
     await Promise.all([
       recipesStore.fetchList(),
       goalsStore.fetch(),
-      mealPlanStore.fetchList()
+      mealPlanStore.fetchList(),
+      userStore.fetchTargets()
     ])
     await updateNutritionCache()
 
@@ -686,6 +714,10 @@ onMounted(() => {
 .top-actions {
   display: flex;
   gap: 12px;
+}
+
+.targets-alert {
+  margin-bottom: 20px;
 }
 
 .weekly-summary-card {
