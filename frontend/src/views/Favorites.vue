@@ -142,6 +142,15 @@ const loading = ref(false)
 const recipes = ref([])
 const nutritionCache = ref({})
 
+function formatDate(date) {
+  if (!date) return ''
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const addToDiaryDialog = reactive({
   visible: false,
   recipe: null,
@@ -166,15 +175,6 @@ const getWarningClass = (type) => {
     sugar: 'high-sugar'
   }
   return classMap[type] || ''
-}
-
-const formatDate = (date) => {
-  if (!date) return ''
-  const d = new Date(date)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 const loadNutrition = async (recipeId) => {
