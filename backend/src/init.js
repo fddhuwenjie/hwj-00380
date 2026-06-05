@@ -19,8 +19,18 @@ function initDatabase() {
       carbs REAL NOT NULL DEFAULT 0,
       fiber REAL NOT NULL DEFAULT 0,
       sodium REAL NOT NULL DEFAULT 0,
+      price_per_500g REAL NOT NULL DEFAULT 0,
       is_custom INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS ingredient_price_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER NOT NULL,
+      price_per_500g REAL NOT NULL DEFAULT 0,
+      record_date TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS recipes (
@@ -28,8 +38,25 @@ function initDatabase() {
       name TEXT NOT NULL,
       category TEXT NOT NULL,
       servings INTEGER NOT NULL DEFAULT 1,
+      cover_image TEXT,
+      description TEXT,
+      is_public INTEGER NOT NULL DEFAULT 0,
+      author_id INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS recipe_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipe_id INTEGER NOT NULL,
+      version_number INTEGER NOT NULL DEFAULT 1,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      servings INTEGER NOT NULL DEFAULT 1,
+      snapshot_data TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS recipe_steps (
@@ -163,6 +190,9 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_ingredients_category ON ingredients(category);
     CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name);
     CREATE INDEX IF NOT EXISTS idx_recipes_category ON recipes(category);
+    CREATE INDEX IF NOT EXISTS idx_recipes_public ON recipes(is_public);
+    CREATE INDEX IF NOT EXISTS idx_recipe_versions_recipe ON recipe_versions(recipe_id);
+    CREATE INDEX IF NOT EXISTS idx_ingredient_price_history ON ingredient_price_history(ingredient_id, record_date);
     CREATE INDEX IF NOT EXISTS idx_meal_plan_items_plan ON meal_plan_items(meal_plan_id);
     CREATE INDEX IF NOT EXISTS idx_recipe_ratings_recipe ON recipe_ratings(recipe_id);
     CREATE INDEX IF NOT EXISTS idx_recipe_favorites_user ON recipe_favorites(user_id);
@@ -186,6 +216,36 @@ function initDatabase() {
       INSERT INTO users (username, height, weight, age, gender, activity_level, bmr, tdee)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run('默认用户', 175, 70, 30, 'male', 'moderate', defaultBMR, defaultTDEE);
+  }
+
+  function columnExists(tableName, columnName) {
+    try {
+      const result = db.prepare(`PRAGMA table_info(${tableName})`).all();
+      return result.some(col => col.name === columnName);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (!columnExists('ingredients', 'price_per_500g')) {
+    db.exec('ALTER TABLE ingredients ADD COLUMN price_per_500g REAL NOT NULL DEFAULT 0');
+  }
+
+  if (!columnExists('recipes', 'cover_image')) {
+    db.exec('ALTER TABLE recipes ADD COLUMN cover_image TEXT');
+  }
+  if (!columnExists('recipes', 'description')) {
+    db.exec('ALTER TABLE recipes ADD COLUMN description TEXT');
+  }
+  if (!columnExists('recipes', 'is_public')) {
+    db.exec('ALTER TABLE recipes ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists('recipes', 'author_id')) {
+    db.exec('ALTER TABLE recipes ADD COLUMN author_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id)');
+  }
+
+  if (!columnExists('users', 'nickname')) {
+    db.exec('ALTER TABLE users ADD COLUMN nickname TEXT');
   }
 
   console.log('数据库表结构初始化完成');

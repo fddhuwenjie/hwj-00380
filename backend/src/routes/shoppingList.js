@@ -6,9 +6,13 @@ const router = express.Router();
 router.get('/', (req, res) => {
   try {
     const items = db.prepare(`
-      SELECT sl.*, mp.week_start_date
+      SELECT sl.*, mp.week_start_date, i.price_per_500g,
+             CASE WHEN i.price_per_500g > 0 
+                  THEN ROUND(sl.amount / 500 * i.price_per_500g, 2) 
+                  ELSE 0 END as estimated_price
       FROM shopping_list sl
       LEFT JOIN meal_plans mp ON sl.meal_plan_id = mp.id
+      LEFT JOIN ingredients i ON sl.ingredient_id = i.id
       ORDER BY sl.meal_plan_id, sl.category, sl.ingredient_name
     `).all();
 
@@ -19,10 +23,12 @@ router.get('/', (req, res) => {
           meal_plan_id: item.meal_plan_id,
           week_start_date: item.week_start_date,
           items: [],
-          grouped: {}
+          grouped: {},
+          total_estimated_price: 0
         };
       }
       acc[planId].items.push(item);
+      acc[planId].total_estimated_price += item.estimated_price || 0;
       
       if (!acc[planId].grouped[item.category]) {
         acc[planId].grouped[item.category] = [];
@@ -32,7 +38,10 @@ router.get('/', (req, res) => {
       return acc;
     }, {});
 
-    const result = Object.values(groupedByPlan);
+    const result = Object.values(groupedByPlan).map(p => ({
+      ...p,
+      total_estimated_price: Math.round(p.total_estimated_price * 100) / 100
+    }));
     res.json({ success: true, data: result });
   } catch (error) {
     res.json({ success: false, error: error.message });
@@ -82,9 +91,14 @@ router.get('/:planId', (req, res) => {
     });
 
     const allItems = db.prepare(`
-      SELECT * FROM shopping_list
-      WHERE meal_plan_id = ?
-      ORDER BY category, ingredient_name
+      SELECT sl.*, i.price_per_500g,
+             CASE WHEN i.price_per_500g > 0 
+                  THEN ROUND(sl.amount / 500 * i.price_per_500g, 2) 
+                  ELSE 0 END as estimated_price
+      FROM shopping_list sl
+      LEFT JOIN ingredients i ON sl.ingredient_id = i.id
+      WHERE sl.meal_plan_id = ?
+      ORDER BY sl.category, sl.ingredient_name
     `).all(planId);
 
     const grouped = allItems.reduce((acc, item) => {
@@ -95,7 +109,16 @@ router.get('/:planId', (req, res) => {
       return acc;
     }, {});
 
-    res.json({ success: true, data: { items: allItems, grouped } });
+    const totalEstimatedPrice = allItems.reduce((sum, item) => sum + (item.estimated_price || 0), 0);
+
+    res.json({ 
+      success: true, 
+      data: { 
+        items: allItems, 
+        grouped,
+        total_estimated_price: Math.round(totalEstimatedPrice * 100) / 100
+      } 
+    });
   } catch (error) {
     res.json({ success: false, error: error.message });
   }

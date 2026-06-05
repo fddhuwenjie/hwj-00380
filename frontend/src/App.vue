@@ -47,6 +47,22 @@
           <el-icon><Star /></el-icon>
           <span>我的收藏</span>
         </el-menu-item>
+        <el-menu-item index="/community">
+          <el-icon><Share /></el-icon>
+          <span>食谱社区</span>
+        </el-menu-item>
+        <el-menu-item index="/suggestions">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>智能建议</span>
+        </el-menu-item>
+        <el-menu-item index="/price-trends">
+          <el-icon><Histogram /></el-icon>
+          <span>价格趋势</span>
+        </el-menu-item>
+        <el-menu-item index="/data-management">
+          <el-icon><Setting /></el-icon>
+          <span>数据管理</span>
+        </el-menu-item>
         <el-menu-item index="/profile">
           <el-icon><User /></el-icon>
           <span>体质档案</span>
@@ -74,7 +90,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Food, Dish, Notebook, Calendar, ShoppingCart, Search, Document, DataLine, Star, User } from '@element-plus/icons-vue'
+import { Food, Dish, Notebook, Calendar, ShoppingCart, Search, Document, DataLine, Star, User, Share, DataAnalysis, Histogram, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -91,6 +107,10 @@ const currentPageTitle = computed(() => {
     '/diary': '饮食日记',
     '/statistics': '营养统计',
     '/favorites': '我的收藏',
+    '/community': '食谱社区',
+    '/suggestions': '智能建议',
+    '/price-trends': '价格趋势',
+    '/data-management': '数据管理',
     '/profile': '体质档案'
   }
   const path = route.path.startsWith('/recipes/') && route.path !== '/recipes/create'

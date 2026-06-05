@@ -79,6 +79,13 @@
             {{ row.sodium || 0 }}
           </template>
         </el-table-column>
+        <el-table-column prop="price_per_500g" label="价格(元/500g)" width="140" align="right">
+          <template #default="{ row }">
+            <span :class="row.price_per_500g ? 'price-text' : 'price-empty'">
+              {{ row.price_per_500g ? '¥' + row.price_per_500g.toFixed(2) : '--' }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="{ row }">
             <div class="table-actions" style="justify-content: center;">
@@ -221,6 +228,21 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="参考价格" prop="price_per_500g">
+              <el-input-number
+                v-model="formData.price_per_500g"
+                :min="0"
+                :precision="2"
+                :step="0.5"
+                controls-position="right"
+                style="width: 100%;"
+              />
+              <span style="color: #909399; font-size: 12px;">元/500g</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -283,7 +305,8 @@ const formData = ref({
   fat: 0,
   carbs: 0,
   fiber: 0,
-  sodium: 0
+  sodium: 0,
+  price_per_500g: 0
 })
 
 const formRules = {
@@ -365,7 +388,8 @@ const handleEdit = (row) => {
     fat: row.fat || 0,
     carbs: row.carbs || 0,
     fiber: row.fiber || 0,
-    sodium: row.sodium || 0
+    sodium: row.sodium || 0,
+    price_per_500g: row.price_per_500g || 0
   }
   dialogVisible.value = true
 }
@@ -399,7 +423,8 @@ const resetForm = () => {
     fat: 0,
     carbs: 0,
     fiber: 0,
-    sodium: 0
+    sodium: 0,
+    price_per_500g: 0
   }
   formRef.value?.resetFields()
 }
@@ -461,5 +486,14 @@ onMounted(() => {
   background: #fff;
   border-radius: 8px;
   padding: 24px;
+}
+
+.price-text {
+  color: #F56C6C;
+  font-weight: 600;
+}
+
+.price-empty {
+  color: #C0C4CC;
 }
 </style>

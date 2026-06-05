@@ -1,0 +1,1 @@
+import{a as t}from"./index-DwQHIGBJ.js";const s=e=>t.get("/ingredients",{params:e}),i=e=>t.post("/ingredients",e),a=(e,n)=>t.put(`/ingredients/${e}`,n),d=e=>t.delete(`/ingredients/${e}`),g=e=>t.get("/ingredients/search",{params:{keyword:e}});export{i as c,d,s as g,g as s,a as u};

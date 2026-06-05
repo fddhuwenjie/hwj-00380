@@ -7,6 +7,14 @@
           <el-icon><ArrowLeft /></el-icon>
           返回
         </el-button>
+        <el-button @click="showVersionsDrawer = true">
+          <el-icon><Clock /></el-icon>
+          版本历史
+        </el-button>
+        <el-button type="success" @click="handleExportRecipe">
+          <el-icon><Download /></el-icon>
+          导出食谱
+        </el-button>
         <el-button type="primary" @click="handleEdit">
           <el-icon><Edit /></el-icon>
           编辑
@@ -71,7 +79,7 @@
               link
               @click="resetReplacements"
             >
-              <el-icon><RefreshRight /></el-icon>
+              <el-icon><Refresh /></el-icon>
               重置替换
             </el-button>
           </div>
@@ -348,6 +356,121 @@
       </el-dialog>
 
       <el-empty v-if="!recipe && !loading" description="未找到食谱信息" />
+
+      <el-drawer
+        v-model="showVersionsDrawer"
+        title="版本历史"
+        direction="rtl"
+        size="560px"
+      >
+        <div v-loading="versionsLoading" class="versions-content">
+          <div v-if="versions.length === 0" class="empty-versions">
+            <el-icon :size="48" color="#C0C4CC"><Document /></el-icon>
+            <p>暂无版本记录</p>
+            <p style="color: #909399; font-size: 13px;">编辑并保存食谱后将自动生成版本快照</p>
+          </div>
+
+          <div v-else class="versions-list">
+            <div
+              v-for="(version, index) in versions"
+              :key="version.id"
+              :class="['version-item', { 'current-version': index === 0 }]"
+            >
+              <div class="version-header">
+                <div class="version-info">
+                  <el-tag :type="index === 0 ? 'success' : 'info'" size="small">
+                    v{{ version.version_number }}
+                  </el-tag>
+                  <span class="version-name">{{ version.name }}</span>
+                  <el-tag v-if="index === 0" size="small" type="success" effect="light">
+                    当前版本
+                  </el-tag>
+                </div>
+                <span class="version-date">{{ formatDateTime(version.created_at) }}</span>
+              </div>
+              <div class="version-meta">
+                <span class="meta-item">
+                  <el-icon><Notebook /></el-icon>
+                  {{ version.category }}
+                </span>
+                <span class="meta-item">
+                  <el-icon><User /></el-icon>
+                  {{ version.servings }} 人份
+                </span>
+              </div>
+              <div class="version-actions">
+                <el-button size="small" @click="viewVersionDetail(version)">
+                  <el-icon><View /></el-icon>
+                  查看详情
+                </el-button>
+                <el-button
+                  size="small"
+                  type="primary"
+                  :disabled="index === 0"
+                  @click="handleRollback(version)"
+                >
+                  <el-icon><Refresh /></el-icon>
+                  回滚到此版本
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-drawer>
+
+      <el-dialog
+        v-model="showVersionDetailDialog"
+        :title="`版本详情 - v${currentViewingVersion?.version_number}`"
+        width="800px"
+      >
+        <div v-if="currentViewingVersion" class="version-detail-content">
+          <div class="version-detail-header">
+            <h3>{{ currentViewingVersion.name }}</h3>
+            <div class="version-detail-meta">
+              <el-tag size="small">{{ currentViewingVersion.category }}</el-tag>
+              <span>{{ currentViewingVersion.servings }} 人份</span>
+              <span>创建时间: {{ formatDateTime(currentViewingVersion.created_at) }}</span>
+            </div>
+          </div>
+
+          <el-tabs v-model="versionDetailTab">
+            <el-tab-pane label="食材" name="ingredients">
+              <div class="version-ingredients">
+                <el-table :data="versionSnapshotData?.ingredients || []" size="small">
+                  <el-table-column prop="name" label="食材名称" />
+                  <el-table-column prop="amount" label="用量" width="100" align="right">
+                    <template #default="{ row }">
+                      {{ row.amount }}g
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-tab-pane>
+            <el-tab-pane label="步骤" name="steps">
+              <div class="version-steps">
+                <div
+                  v-for="(step, index) in versionSnapshotData?.steps || []"
+                  :key="index"
+                  class="version-step-item"
+                >
+                  <div class="step-number">{{ index + 1 }}</div>
+                  <div class="step-content">{{ step.description }}</div>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+        <template #footer>
+          <el-button @click="showVersionDetailDialog = false">关闭</el-button>
+          <el-button
+            v-if="currentViewingVersion && currentViewingVersion.version_number !== versions[0]?.version_number"
+            type="primary"
+            @click="handleRollback(currentViewingVersion)"
+          >
+            回滚到此版本
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -358,10 +481,12 @@ import * as echarts from 'echarts'
 import { useRoute, useRouter } from 'vue-router'
 import { useRecipesStore, useGoalsStore, useFavoritesStore, useRatingsStore } from '@/store'
 import { checkNutritionWarnings, calculateMacronutrientRatio, roundNutrition } from '@/utils/nutrition'
-import { ArrowLeft, Edit, User, Star, RefreshRight, Delete, ChatLineRound, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, Edit, User, Star, Refresh, Delete, ChatLineRound, Plus, Clock, Download, View, Notebook, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getRecipeNutrition } from '@/api/recipes'
 import { getIngredientReplacements, calculateReplacedRecipeNutrition } from '@/api/replacements'
+import { getRecipeVersions, getVersionDetail, rollbackVersion } from '@/api/recipeVersions'
+import { exportSingleRecipe } from '@/api/importExport'
 
 const route = useRoute()
 const router = useRouter()
@@ -402,6 +527,14 @@ const replacements = reactive({
 
 const replacedIngredients = ref({})
 const adjustedNutrition = ref(null)
+
+const showVersionsDrawer = ref(false)
+const versionsLoading = ref(false)
+const versions = ref([])
+const showVersionDetailDialog = ref(false)
+const currentViewingVersion = ref(null)
+const versionSnapshotData = ref(null)
+const versionDetailTab = ref('ingredients')
 
 const dailyRecommendations = {
   calories: 2000,
@@ -854,7 +987,8 @@ const loadData = async () => {
     }
     await Promise.all([
       loadRatings(),
-      loadFavoriteStatus()
+      loadFavoriteStatus(),
+      loadVersions()
     ])
     await nextTick()
     initPieChart()
@@ -884,8 +1018,96 @@ const formatDate = (dateStr) => {
   })
 }
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const loadVersions = async () => {
+  if (!recipe.value?.id) return
+  versionsLoading.value = true
+  try {
+    const res = await getRecipeVersions(recipe.value.id)
+    const data = res.data || res
+    versions.value = data.versions || data || []
+  } catch (error) {
+    ElMessage.error(error.message || '加载版本历史失败')
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+const viewVersionDetail = async (version) => {
+  try {
+    const res = await getVersionDetail(version.id)
+    const data = res.data || res
+    currentViewingVersion.value = data.version || data
+    versionSnapshotData.value = data.version?.snapshot_data ? JSON.parse(data.version.snapshot_data) : null
+    showVersionDetailDialog.value = true
+    versionDetailTab.value = 'ingredients'
+  } catch (error) {
+    ElMessage.error(error.message || '加载版本详情失败')
+  }
+}
+
+const handleRollback = async (version) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要回滚到版本 v${version.version_number} 吗？\n当前版本将自动保存为新版本。`,
+      '回滚确认',
+      {
+        confirmButtonText: '确认回滚',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    const res = await rollbackVersion(version.id)
+    ElMessage.success('回滚成功！已自动保存当前版本为新版本')
+    showVersionsDrawer.value = false
+    showVersionDetailDialog.value = false
+    loadData()
+    loadVersions()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.message || '回滚失败')
+    }
+  }
+}
+
+const handleExportRecipe = async () => {
+  if (!recipe.value?.id) return
+  try {
+    const res = await exportSingleRecipe(recipe.value.id)
+    const blob = res.data || res
+    const url = window.URL.createObjectURL(new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `${recipe.value.name}_食谱_${Date.now()}.json`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('食谱导出成功')
+  } catch (error) {
+    ElMessage.error(error.message || '导出失败')
+  }
+}
+
 watch(currentServings, () => {
   updateCharts()
+})
+
+watch(showVersionsDrawer, (val) => {
+  if (val) {
+    loadVersions()
+  }
 })
 
 onMounted(() => {
@@ -1351,5 +1573,152 @@ onUnmounted(() => {
     align-items: flex-start;
     gap: 8px;
   }
+}
+
+.versions-content {
+  padding: 8px 0;
+}
+
+.empty-versions {
+  text-align: center;
+  padding: 60px 20px;
+  color: #909399;
+}
+
+.empty-versions p {
+  margin: 8px 0 0 0;
+}
+
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.version-item {
+  padding: 20px;
+  background: #f5f7fa;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.version-item.current-version {
+  background: #f0f9eb;
+  border-color: #67C23A;
+}
+
+.version-item:hover {
+  background: #ecf5ff;
+  border-color: #409EFF;
+}
+
+.version-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.version-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.version-name {
+  font-weight: 600;
+  color: #303133;
+  font-size: 16px;
+}
+
+.version-date {
+  font-size: 12px;
+  color: #909399;
+}
+
+.version-meta {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.version-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.version-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.version-detail-header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.version-detail-header h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  color: #303133;
+}
+
+.version-detail-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #606266;
+}
+
+.version-ingredients {
+  margin-top: 16px;
+}
+
+.version-steps {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.version-step-item {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.version-step-item .step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #409EFF;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.version-step-item .step-content {
+  flex: 1;
+  line-height: 1.8;
+  color: #303133;
 }
 </style>

@@ -16,6 +16,11 @@ const favoritesRouter = require('./src/routes/favorites');
 const replacementsRouter = require('./src/routes/replacements');
 const diaryRouter = require('./src/routes/diary');
 const statisticsRouter = require('./src/routes/statistics');
+const communityRouter = require('./src/routes/community');
+const suggestionsRouter = require('./src/routes/suggestions');
+const recipeVersionsRouter = require('./src/routes/recipeVersions');
+const priceHistoryRouter = require('./src/routes/priceHistory');
+const importExportRouter = require('./src/routes/importExport');
 
 const app = express();
 const PORT = 8380;
@@ -43,6 +48,11 @@ app.use('/api/favorites', favoritesRouter);
 app.use('/api/replacements', replacementsRouter);
 app.use('/api/diary', diaryRouter);
 app.use('/api/statistics', statisticsRouter);
+app.use('/api/community', communityRouter);
+app.use('/api/suggestions', suggestionsRouter);
+app.use('/api/recipe-versions', recipeVersionsRouter);
+app.use('/api/price-history', priceHistoryRouter);
+app.use('/api/import-export', importExportRouter);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, error: '接口不存在' });

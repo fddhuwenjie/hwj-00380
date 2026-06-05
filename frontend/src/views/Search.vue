@@ -162,7 +162,7 @@
             </div>
             <div class="recommend-actions">
               <el-button type="primary" @click="getRecommendations" :loading="searching">
-                <el-icon><MagicStick /></el-icon>
+                <el-icon><DataAnalysis /></el-icon>
                 获取推荐
               </el-button>
               <el-button @click="clearSelectedIngredients">
@@ -234,7 +234,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, MagicStick } from '@element-plus/icons-vue'
+import { Search, Refresh, DataAnalysis } from '@element-plus/icons-vue'
 import { useIngredientsStore, useRecipesStore } from '@/store'
 import { searchRecipesByNutrition, searchRecipesByIngredient, getRecommendations as fetchRecommendations } from '@/api/search'
 

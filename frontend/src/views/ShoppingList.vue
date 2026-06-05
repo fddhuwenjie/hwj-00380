@@ -37,6 +37,10 @@
           <span class="stat-label">已购买</span>
           <span class="stat-value">{{ purchasedCount }}</span>
         </div>
+        <div class="stat-item">
+          <span class="stat-label">预估总价</span>
+          <span class="stat-value price">¥{{ totalEstimatedPrice.toFixed(2) }}</span>
+        </div>
         <div class="stat-progress">
           <el-progress
             :percentage="purchasePercentage"
@@ -66,6 +70,13 @@
               />
               <span class="item-name">{{ item.name }}</span>
               <span class="item-amount">{{ item.amount }} g</span>
+              <span class="item-price" v-if="item.price_per_500g !== null && item.price_per_500g !== undefined">
+                ¥{{ item.estimated_price?.toFixed(2) || '0.00' }}
+                <span class="unit-price">(¥{{ item.price_per_500g?.toFixed(2) || '0.00' }}/500g)</span>
+              </span>
+              <span class="item-price no-price" v-else>
+                --
+              </span>
               <el-button
                 v-if="item.is_manual"
                 type="danger"
@@ -194,6 +205,16 @@ const progressColor = computed(() => {
   if (purchasePercentage.value >= 100) return '#67c23a'
   if (purchasePercentage.value >= 50) return '#e6a23c'
   return '#409eff'
+})
+
+const totalEstimatedPrice = computed(() => {
+  const list = shoppingListStore.list || []
+  return list.reduce((total, item) => {
+    if (item.estimated_price !== null && item.estimated_price !== undefined) {
+      return total + item.estimated_price
+    }
+    return total
+  }, 0)
 })
 
 const getCategoryItems = (category) => {
@@ -490,5 +511,38 @@ onMounted(() => {
     width: 100% !important;
     margin-right: 0 !important;
   }
+}
+
+.stat-value.price {
+  color: #F56C6C;
+  font-weight: 700;
+}
+
+.item-price {
+  font-size: 14px;
+  font-weight: 600;
+  color: #F56C6C;
+  min-width: 160px;
+  text-align: right;
+}
+
+.item-price.no-price {
+  color: #C0C4CC;
+  font-weight: normal;
+}
+
+.unit-price {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+.shopping-item.purchased .item-price {
+  color: #c0c4cc;
+}
+
+.shopping-item.purchased .unit-price {
+  color: #c0c4cc;
 }
 </style>

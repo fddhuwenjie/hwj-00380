@@ -64,6 +64,26 @@ const routes = [
     path: '/favorites',
     name: 'Favorites',
     component: () => import('@/views/Favorites.vue')
+  },
+  {
+    path: '/community',
+    name: 'Community',
+    component: () => import('@/views/Community.vue')
+  },
+  {
+    path: '/suggestions',
+    name: 'Suggestions',
+    component: () => import('@/views/Suggestions.vue')
+  },
+  {
+    path: '/price-trends',
+    name: 'PriceTrends',
+    component: () => import('@/views/PriceTrends.vue')
+  },
+  {
+    path: '/data-management',
+    name: 'DataManagement',
+    component: () => import('@/views/DataManagement.vue')
   }
 ]
 

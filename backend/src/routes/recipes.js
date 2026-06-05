@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { createVersionSnapshot } = require('./recipeVersions');
 
 const router = express.Router();
 
@@ -54,7 +55,8 @@ function getRecipeWithDetails(recipeId, userId = 1) {
   const stepsWithIngredients = steps.map(step => {
     const ingredients = db.prepare(`
       SELECT ri.id, ri.ingredient_id, ri.amount, i.name, i.category,
-             i.calories, i.protein, i.fat, i.carbs, i.fiber, i.sodium
+             i.calories, i.protein, i.fat, i.carbs, i.fiber, i.sodium,
+             i.price_per_500g
       FROM recipe_ingredients ri
       JOIN ingredients i ON ri.ingredient_id = i.id
       WHERE ri.recipe_step_id = ?
@@ -70,6 +72,11 @@ function getRecipeWithDetails(recipeId, userId = 1) {
     FROM recipe_ratings WHERE recipe_id = ?
   `).get(recipeId);
 
+  const favoriteCount = db.prepare(`
+    SELECT COUNT(*) as favorite_count
+    FROM recipe_favorites WHERE recipe_id = ?
+  `).get(recipeId);
+
   const userRating = db.prepare(`
     SELECT * FROM recipe_ratings WHERE recipe_id = ? AND user_id = ?
   `).get(recipeId, userId);
@@ -78,15 +85,44 @@ function getRecipeWithDetails(recipeId, userId = 1) {
     SELECT id FROM recipe_favorites WHERE recipe_id = ? AND user_id = ?
   `).get(recipeId, userId);
 
+  const author = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(recipe.author_id || 1);
+
+  const priceInfo = calculateRecipePrice(recipeId, recipe.servings);
+
   return {
     ...recipe,
+    author_nickname: author ? (author.nickname || author.username) : '未知',
     steps: stepsWithIngredients,
     totalNutrition: nutrition.total,
     perServingNutrition: nutrition.perServing,
     avg_rating: ratingStats.avg_rating ? Math.round(ratingStats.avg_rating * 10) / 10 : 0,
     total_ratings: ratingStats.total_ratings || 0,
+    favorite_count: favoriteCount.favorite_count || 0,
     user_rating: userRating || null,
-    is_favorite: !!isFavorite
+    is_favorite: !!isFavorite,
+    total_price: priceInfo.total_price,
+    per_serving_price: priceInfo.per_serving_price
+  };
+}
+
+function calculateRecipePrice(recipeId, servings) {
+  const ingredients = db.prepare(`
+    SELECT ri.amount, i.price_per_500g
+    FROM recipe_ingredients ri
+    JOIN ingredients i ON ri.ingredient_id = i.id
+    JOIN recipe_steps rs ON ri.recipe_step_id = rs.id
+    WHERE rs.recipe_id = ?
+  `).all(recipeId);
+
+  let totalPrice = 0;
+  ingredients.forEach(ing => {
+    const pricePerGram = (ing.price_per_500g || 0) / 500;
+    totalPrice += pricePerGram * ing.amount;
+  });
+
+  return {
+    total_price: Math.round(totalPrice * 100) / 100,
+    per_serving_price: servings > 0 ? Math.round((totalPrice / servings) * 100) / 100 : 0
   };
 }
 
@@ -156,7 +192,7 @@ router.get('/:id', (req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { name, category, servings, steps } = req.body;
+    const { name, category, servings, steps, cover_image, description, is_public = 0, author_id = 1 } = req.body;
 
     if (!name || !category || !servings || !steps) {
       return res.json({ success: false, error: '名称、分类、份数和步骤为必填项' });
@@ -171,9 +207,9 @@ router.post('/', (req, res) => {
     db.exec('BEGIN TRANSACTION');
     try {
       const recipeResult = db.prepare(`
-        INSERT INTO recipes (name, category, servings)
-        VALUES (?, ?, ?)
-      `).run(name, category, servings);
+        INSERT INTO recipes (name, category, servings, cover_image, description, is_public, author_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(name, category, servings, cover_image || null, description || null, is_public ? 1 : 0, author_id);
 
       recipeId = recipeResult.lastInsertRowid;
 
@@ -211,6 +247,28 @@ router.post('/', (req, res) => {
         }
       });
 
+      const insertVersion = db.prepare(`
+        INSERT INTO recipe_versions (recipe_id, version_number, name, category, servings, snapshot_data)
+        VALUES (?, 1, ?, ?, ?, ?)
+      `);
+      const snapshotSteps = steps.map(s => ({
+        step_order: s.step_order,
+        description: s.description,
+        ingredients: s.ingredients ? s.ingredients.map(i => ({
+          ingredient_id: i.ingredient_id,
+          amount: i.amount
+        })) : []
+      }));
+      const snapshot = JSON.stringify({
+        name,
+        category,
+        servings,
+        cover_image,
+        description,
+        steps: snapshotSteps
+      });
+      insertVersion.run(recipeId, name, category, servings, snapshot);
+
       db.exec('COMMIT');
     } catch (err) {
       db.exec('ROLLBACK');
@@ -226,7 +284,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, servings, steps } = req.body;
+    const { name, category, servings, steps, cover_image, description, is_public } = req.body;
 
     const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id);
     if (!recipe) {
@@ -242,14 +300,21 @@ router.put('/:id', (req, res) => {
 
     db.exec('BEGIN TRANSACTION');
     try {
+      createVersionSnapshot(id);
+
+      const isPublicValue = is_public !== undefined ? (is_public ? 1 : 0) : undefined;
+
       db.prepare(`
         UPDATE recipes
         SET name = COALESCE(?, name),
             category = COALESCE(?, category),
             servings = COALESCE(?, servings),
+            cover_image = COALESCE(?, cover_image),
+            description = COALESCE(?, description),
+            is_public = COALESCE(?, is_public),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(name, category, servings, id);
+      `).run(name, category, servings, cover_image, description, isPublicValue, id);
 
       if (steps) {
         db.prepare('DELETE FROM recipe_ingredients WHERE recipe_step_id IN (SELECT id FROM recipe_steps WHERE recipe_id = ?)').run(id);

@@ -45,7 +45,7 @@ router.get('/:id', (req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { name, category, calories, protein, fat, carbs, fiber, sodium } = req.body;
+    const { name, category, calories, protein, fat, carbs, fiber, sodium, price_per_500g } = req.body;
 
     if (!name || !category) {
       return res.json({ success: false, error: '名称和分类为必填项' });
@@ -57,8 +57,8 @@ router.post('/', (req, res) => {
     }
 
     const result = db.prepare(`
-      INSERT INTO ingredients (name, category, calories, protein, fat, carbs, fiber, sodium, is_custom)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO ingredients (name, category, calories, protein, fat, carbs, fiber, sodium, price_per_500g, is_custom)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
       name,
       category,
@@ -67,7 +67,8 @@ router.post('/', (req, res) => {
       fat || 0,
       carbs || 0,
       fiber || 0,
-      sodium || 0
+      sodium || 0,
+      price_per_500g || 0
     );
 
     const ingredient = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(result.lastInsertRowid);
@@ -80,7 +81,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, calories, protein, fat, carbs, fiber, sodium } = req.body;
+    const { name, category, calories, protein, fat, carbs, fiber, sodium, price_per_500g } = req.body;
 
     const ingredient = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(id);
     if (!ingredient) {
@@ -103,7 +104,8 @@ router.put('/:id', (req, res) => {
           fat = COALESCE(?, fat),
           carbs = COALESCE(?, carbs),
           fiber = COALESCE(?, fiber),
-          sodium = COALESCE(?, sodium)
+          sodium = COALESCE(?, sodium),
+          price_per_500g = COALESCE(?, price_per_500g)
       WHERE id = ?
     `).run(
       name,
@@ -114,6 +116,7 @@ router.put('/:id', (req, res) => {
       carbs,
       fiber,
       sodium,
+      price_per_500g,
       id
     );
 

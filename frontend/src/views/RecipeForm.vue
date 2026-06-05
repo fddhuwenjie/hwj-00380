@@ -57,6 +57,44 @@
           </el-col>
         </el-row>
 
+        <el-row :gutter="24">
+          <el-col :span="16">
+            <el-form-item label="封面图片">
+              <el-input
+                v-model="formData.cover_image"
+                placeholder="请输入封面图片URL"
+                size="large"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="公开分享">
+              <el-switch
+                v-model="formData.is_public"
+                active-text="公开"
+                inactive-text="私有"
+                size="large"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="食谱描述">
+          <el-input
+            v-model="formData.description"
+            type="textarea"
+            :rows="2"
+            placeholder="简要描述这个食谱的特点、口味等..."
+            maxlength="200"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <div v-if="formData.cover_image" class="cover-preview">
+          <span class="preview-label">封面预览:</span>
+          <img :src="formData.cover_image" alt="封面预览" class="preview-image" />
+        </div>
+
         <div class="section-title">
           <h3>制作步骤</h3>
           <el-button type="primary" size="small" @click="addStep">
@@ -285,6 +323,9 @@ const formData = reactive({
   name: '',
   category: '',
   servings: 1,
+  cover_image: '',
+  description: '',
+  is_public: false,
   steps: [
     {
       step_order: 1,
@@ -452,6 +493,9 @@ const loadEditData = async () => {
       formData.name = recipe.name
       formData.category = recipe.category
       formData.servings = recipe.servings
+      formData.cover_image = recipe.cover_image || ''
+      formData.description = recipe.description || ''
+      formData.is_public = recipe.is_public || false
       formData.steps = recipe.steps.map((step, index) => ({
         step_order: index + 1,
         description: step.description,
@@ -499,6 +543,9 @@ const handleSave = async () => {
       name: formData.name,
       category: formData.category,
       servings: formData.servings,
+      cover_image: formData.cover_image || '',
+      description: formData.description || '',
+      is_public: formData.is_public || false,
       steps: formData.steps.map((step, index) => ({
         step_order: index + 1,
         description: step.description,
@@ -737,5 +784,30 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.cover-preview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.preview-label {
+  font-size: 14px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.preview-image {
+  width: 200px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 </style>
