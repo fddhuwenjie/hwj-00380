@@ -287,6 +287,9 @@ export const useDiaryStore = defineStore('diary', {
         this.loading = false
       }
     },
+    async fetchDiary(date) {
+      return this.fetch(date)
+    },
     async fetchHistory(params) {
       this.loading = true
       try {
