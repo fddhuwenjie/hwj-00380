@@ -277,4 +277,51 @@ router.delete('/:id', (req, res) => {
   }
 });
 
+router.get('/:id/nutrition', (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id);
+    if (!recipe) {
+      return res.json({ success: false, error: '食谱不存在' });
+    }
+
+    const nutrition = calculateNutrition(id, recipe.servings);
+
+    const totalCaloriesFromMacros = nutrition.total.protein * 4 + nutrition.total.fat * 9 + nutrition.total.carbs * 4;
+    const macroRatio = {
+      protein: totalCaloriesFromMacros > 0 ? (nutrition.total.protein * 4 / totalCaloriesFromMacros * 100) : 0,
+      fat: totalCaloriesFromMacros > 0 ? (nutrition.total.fat * 9 / totalCaloriesFromMacros * 100) : 0,
+      carbs: totalCaloriesFromMacros > 0 ? (nutrition.total.carbs * 4 / totalCaloriesFromMacros * 100) : 0
+    };
+
+    const perServingCaloriesFromMacros = nutrition.perServing.protein * 4 + nutrition.perServing.fat * 9 + nutrition.perServing.carbs * 4;
+    const perServingMacroRatio = {
+      protein: perServingCaloriesFromMacros > 0 ? (nutrition.perServing.protein * 4 / perServingCaloriesFromMacros * 100) : 0,
+      fat: perServingCaloriesFromMacros > 0 ? (nutrition.perServing.fat * 9 / perServingCaloriesFromMacros * 100) : 0,
+      carbs: perServingCaloriesFromMacros > 0 ? (nutrition.perServing.carbs * 4 / perServingCaloriesFromMacros * 100) : 0
+    };
+
+    const warnings = [];
+    if (nutrition.perServing.sodium > 600) warnings.push('高钠');
+    if (nutrition.perServing.fat > 20) warnings.push('高脂');
+    if (nutrition.perServing.carbs > 25) warnings.push('高糖');
+
+    res.json({
+      success: true,
+      data: {
+        recipeId: id,
+        servings: recipe.servings,
+        totalNutrition: nutrition.total,
+        perServingNutrition: nutrition.perServing,
+        macroRatio,
+        perServingMacroRatio,
+        warnings
+      }
+    });
+  } catch (error) {
+    res.json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

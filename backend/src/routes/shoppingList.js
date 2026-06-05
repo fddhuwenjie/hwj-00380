@@ -3,6 +3,42 @@ const db = require('../db');
 
 const router = express.Router();
 
+router.get('/', (req, res) => {
+  try {
+    const items = db.prepare(`
+      SELECT sl.*, mp.week_start_date
+      FROM shopping_list sl
+      LEFT JOIN meal_plans mp ON sl.meal_plan_id = mp.id
+      ORDER BY sl.meal_plan_id, sl.category, sl.ingredient_name
+    `).all();
+
+    const groupedByPlan = items.reduce((acc, item) => {
+      const planId = item.meal_plan_id || 'manual';
+      if (!acc[planId]) {
+        acc[planId] = {
+          meal_plan_id: item.meal_plan_id,
+          week_start_date: item.week_start_date,
+          items: [],
+          grouped: {}
+        };
+      }
+      acc[planId].items.push(item);
+      
+      if (!acc[planId].grouped[item.category]) {
+        acc[planId].grouped[item.category] = [];
+      }
+      acc[planId].grouped[item.category].push(item);
+      
+      return acc;
+    }, {});
+
+    const result = Object.values(groupedByPlan);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.json({ success: false, error: error.message });
+  }
+});
+
 router.get('/:planId', (req, res) => {
   try {
     const { planId } = req.params;

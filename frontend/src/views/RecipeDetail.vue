@@ -24,7 +24,7 @@
                 {{ recipe.category }}
               </el-tag>
               <el-tag type="info" size="large">
-                <el-icon><Scale /></el-icon>
+                <el-icon><User /></el-icon>
                 {{ baseServings }} 人份
               </el-tag>
             </div>
@@ -164,7 +164,7 @@ import * as echarts from 'echarts'
 import { useRoute, useRouter } from 'vue-router'
 import { useRecipesStore, useGoalsStore } from '@/store'
 import { checkNutritionWarnings, calculateMacronutrientRatio, roundNutrition } from '@/utils/nutrition'
-import { ArrowLeft, Edit, Scale } from '@element-plus/icons-vue'
+import { ArrowLeft, Edit, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getRecipeNutrition } from '@/api/recipes'
 
