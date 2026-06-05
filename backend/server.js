@@ -1,0 +1,50 @@
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const initDatabase = require('./src/init');
+const seedDatabase = require('./src/seed');
+
+const ingredientsRouter = require('./src/routes/ingredients');
+const recipesRouter = require('./src/routes/recipes');
+const mealPlansRouter = require('./src/routes/mealPlans');
+const shoppingListRouter = require('./src/routes/shoppingList');
+const searchRouter = require('./src/routes/search');
+const goalsRouter = require('./src/routes/goals');
+
+const app = express();
+const PORT = 8380;
+
+app.use(cors());
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
+
+initDatabase();
+seedDatabase();
+
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, data: { status: 'ok', message: '食谱管理与营养计算系统 API 服务正常' } });
+});
+
+app.use('/api/ingredients', ingredientsRouter);
+app.use('/api/recipes', recipesRouter);
+app.use('/api/meal-plans', mealPlansRouter);
+app.use('/api/shopping-list', shoppingListRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/goals', goalsRouter);
+
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: '接口不存在' });
+});
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, error: '服务器内部错误' });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 服务器已启动在端口 ${PORT}`);
+  console.log(`📦 API 基础地址: http://localhost:${PORT}/api`);
+  console.log(`🍳 食材库: http://localhost:${PORT}/api/ingredients`);
+  console.log(`📖 食谱库: http://localhost:${PORT}/api/recipes`);
+  console.log(`📅 饮食计划: http://localhost:${PORT}/api/meal-plans`);
+});
