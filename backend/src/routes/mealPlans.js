@@ -85,6 +85,17 @@ function getMealPlanWithDetails(planId) {
     nutrition: calculateRecipeNutrition(item.recipe_id, item.servings)
   }));
 
+  const mealTypes = ['breakfast', 'lunch', 'dinner'];
+  const meals = [];
+  for (let day = 0; day < 7; day++) {
+    const dayMeals = {};
+    mealTypes.forEach(type => {
+      const item = itemsWithNutrition.find(i => i.day_index === day && i.meal_type === type);
+      dayMeals[type] = item || null;
+    });
+    meals.push(dayMeals);
+  }
+
   const dailyNutrition = {};
   for (let i = 0; i < 7; i++) {
     const dayItems = itemsWithNutrition.filter(item => item.day_index === i);
@@ -96,6 +107,7 @@ function getMealPlanWithDetails(planId) {
   return {
     ...plan,
     items: itemsWithNutrition,
+    meals,
     dailyNutrition,
     weeklyNutrition
   };

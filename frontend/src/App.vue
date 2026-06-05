@@ -16,7 +16,7 @@
         class="sidebar-menu"
       >
         <el-menu-item index="/ingredients">
-          <el-icon><Vegetable /></el-icon>
+          <el-icon><Dish /></el-icon>
           <span>食材库</span>
         </el-menu-item>
         <el-menu-item index="/recipes">
@@ -58,6 +58,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { Food, Dish, Notebook, Calendar, ShoppingCart, Search } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
